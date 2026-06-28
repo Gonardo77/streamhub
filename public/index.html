@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StreamHub</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Syne:wght@700;800&display=swap');
+    :root {
+      --bg:#0a0a0f; --surface:#13131a; --border:#1e1e2e; --muted:#3a3a52;
+      --text:#e8e8f0; --soft:#8888aa; --accent:#7c6af7; --accent-hi:#a599ff;
+      --red:#e5484d; --green:#30a46c;
+    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:15px;min-height:100vh;display:flex;flex-direction:column}
+
+    /* Header */
+    header{display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid var(--border);position:sticky;top:0;background:rgba(10,10,15,0.92);backdrop-filter:blur(12px);z-index:100}
+    .logo{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-0.5px}
+    .logo span{color:var(--accent-hi)}
+    .header-right{display:flex;align-items:center;gap:10px}
+    .tv-status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--soft);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 14px;cursor:pointer;transition:border-color .2s}
+    .tv-status:hover{border-color:var(--muted)}
+    .tv-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);transition:background .3s}
+    .tv-dot.connected{background:var(--green);box-shadow:0 0 6px var(--green)}
+    .user-btn{font-size:13px;color:var(--soft);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 14px;cursor:pointer;transition:border-color .2s}
+    .user-btn:hover{border-color:var(--muted);color:var(--text)}
+
+    /* Main */
+    main{flex:1;max-width:680px;width:100%;margin:0 auto;padding:32px 24px 80px}
+    .section-label{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin-bottom:14px}
+
+    /* Platforms */
+    .platforms{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:36px}
+    .platform-btn{display:flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);color:var(--soft);font-size:13px;font-weight:500;cursor:pointer;transition:all .18s;user-select:none;position:relative}
+    .platform-btn .dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:background .2s}
+    .platform-btn.active{border-color:var(--accent);color:var(--text);background:rgba(124,106,247,.1)}
+    .platform-btn.active .dot{background:var(--accent-hi)}
+    .platform-btn.not-configured{opacity:0.5}
+    .platform-btn .config-badge{position:absolute;top:-6px;right:-6px;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 5px;white-space:nowrap}
+    .platform-btn.active .config-badge{background:var(--green)}
+    .platform-btn:hover:not(.active){border-color:var(--muted);color:var(--text)}
+
+    /* Search */
+    .search-wrap{position:relative;margin-bottom:10px}
+    .search-input{width:100%;background:var(--surface);border:1.5px solid var(--border);border-radius:14px;color:var(--text);font-family:'Inter',sans-serif;font-size:15px;padding:16px 100px 16px 18px;outline:none;transition:border-color .2s;resize:none;line-height:1.5;min-height:56px}
+    .search-input::placeholder{color:var(--muted)}
+    .search-input:focus{border-color:var(--accent)}
+    .search-btn{position:absolute;right:10px;bottom:10px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:background .2s,opacity .2s}
+    .search-btn:hover{background:var(--accent-hi)}
+    .search-btn:disabled{opacity:.4;cursor:default}
+    .search-examples{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:36px}
+    .example-chip{font-size:12px;color:var(--soft);background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;cursor:pointer;transition:all .15s}
+    .example-chip:hover{color:var(--text);border-color:var(--muted)}
+
+    /* Results */
+    #results{display:flex;flex-direction:column;gap:14px}
+    .result-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 20px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s;animation:fadeUp .25s ease both}
+    .result-card:hover{border-color:var(--muted)}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+    .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .card-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;line-height:1.25}
+    .platform-badge{font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;white-space:nowrap;flex-shrink:0}
+    .badge-netflix{background:rgba(229,9,20,.15);color:#ff4d57}
+    .badge-disney{background:rgba(17,60,207,.15);color:#5b8bff}
+    .badge-amazon{background:rgba(0,168,225,.15);color:#00bdf2}
+    .badge-flow{background:rgba(124,106,247,.2);color:var(--accent-hi)}
+    .card-meta{display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--soft)}
+    .meta-tag{background:rgba(255,255,255,.04);border-radius:5px;padding:3px 8px}
+    .card-synopsis{font-size:13px;color:var(--soft);line-height:1.6}
+    .card-actions{display:flex;align-items:center;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);flex-wrap:wrap;gap:8px}
+    .extra-cost{font-size:12px;color:var(--soft)}
+    .extra-cost.free{color:var(--green)}
+    .play-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+    .play-btn{display:flex;align-items:center;gap:7px;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:9px 18px;font-size:13px;font-weight:600;cursor:pointer;transition:background .18s}
+    .play-btn:hover{background:var(--accent-hi)}
+    .play-btn:disabled{opacity:.35;cursor:default}
+    .play-btn svg{width:14px;height:14px;fill:currentColor}
+    .show-more-btn{width:100%;background:transparent;border:1.5px dashed var(--border);border-radius:14px;color:var(--soft);font-size:13px;font-weight:500;padding:14px;cursor:pointer;transition:all .18s;margin-top:2px}
+    .show-more-btn:hover{border-color:var(--accent);color:var(--accent-hi)}
+    .live-badge{font-size:10px;font-weight:700;background:rgba(48,164,108,.15);color:var(--green);border:1px solid var(--green);border-radius:4px;padding:2px 6px;margin-left:8px;vertical-align:middle}
+
+    /* States */
+    .state-box{text-align:center;padding:48px 24px;color:var(--muted);font-size:14px;line-height:1.7}
+    .state-box .emoji{font-size:36px;margin-bottom:12px;display:block}
+    .loading-dots span{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);margin:0 3px;animation:bounce 1.2s infinite ease-in-out}
+    .loading-dots span:nth-child(2){animation-delay:.2s}
+    .loading-dots span:nth-child(3){animation-delay:.4s}
+    @keyframes bounce{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+
+    /* Modals */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:200;padding:24px}
+    .modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;max-width:440px;width:100%;max-height:90vh;overflow-y:auto}
+    .modal h2{font-family:'Syne',sans-serif;font-size:20px;margin-bottom:8px}
+    .modal p{font-size:13px;color:var(--soft);line-height:1.6;margin-bottom:20px}
+    .modal-label{font-size:12px;color:var(--soft);margin-bottom:6px;display:block}
+    .modal input{width:100%;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-family:'Inter',sans-serif;font-size:14px;padding:12px 14px;outline:none;margin-bottom:12px;transition:border-color .2s}
+    .modal input:focus{border-color:var(--accent)}
+    .modal-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;margin-top:4px}
+    .modal-btn:hover{background:var(--accent-hi)}
+    .modal-btn.secondary{background:transparent;border:1.5px solid var(--border);color:var(--soft);margin-top:8px}
+    .modal-btn.secondary:hover{border-color:var(--muted);color:var(--text);background:transparent}
+    .modal-divider{text-align:center;color:var(--muted);font-size:12px;margin:12px 0}
+    .modal-note{font-size:11px;color:var(--muted);text-align:center;margin-top:12px;line-height:1.5}
+    .platform-creds-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+    .platform-cred-row{display:flex;align-items:center;justify-content:space-between;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 16px}
+    .platform-cred-name{font-size:14px;font-weight:500}
+    .platform-cred-status{font-size:12px;color:var(--muted)}
+    .platform-cred-status.ok{color:var(--green)}
+    .cred-edit-btn{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0}
+    .cred-edit-btn:hover{color:var(--accent-hi)}
+
+    /* Toast */
+    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 20px;font-size:13px;color:var(--text);z-index:300;transition:transform .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap}
+    .toast.show{transform:translateX(-50%) translateY(0)}
+    .toast.success{border-color:var(--green);color:var(--green)}
+    .toast.error{border-color:var(--red);color:var(--red)}
+  </style>
+</head>
+<body>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal">
+    <h2 id="authTitle">Welcome to StreamHub</h2>
+    <p id="authSubtitle">Create an account to save your streaming platforms and search across all of them.</p>
+    <label class="modal-label">Email</label>
+    <input type="email" id="authEmail" placeholder="you@email.com" autocomplete="email" />
+    <label class="modal-label">Password</label>
+    <input type="password" id="authPassword" placeholder="Choose a password" autocomplete="current-password" />
+    <button class="modal-btn" id="authSubmitBtn" onclick="submitAuth()">Create account</button>
+    <div class="modal-divider">— or —</div>
+    <button class="modal-btn secondary" id="authToggleBtn" onclick="toggleAuthMode()">Already have an account? Sign in</button>
+  </div>
+</div>
+
+<!-- Platform Credentials Modal -->
+<div class="modal-overlay" id="credsModal" style="display:none">
+  <div class="modal">
+    <h2>Your streaming accounts</h2>
+    <p>Enter your login for each platform. Credentials are encrypted and stored securely — never shared.</p>
+    <div class="platform-creds-list" id="credsList"></div>
+    <button class="modal-btn secondary" onclick="closeCredsModal()">Done</button>
+  </div>
+</div>
+
+<!-- Single Platform Credential Entry -->
+<div class="modal-overlay" id="singleCredModal" style="display:none">
+  <div class="modal">
+    <h2 id="singleCredTitle">Connect Netflix</h2>
+    <p>Your credentials go directly to the platform — StreamHub never sees your password in plain text.</p>
+    <label class="modal-label">Email / Username</label>
+    <input type="email" id="singleCredEmail" placeholder="you@email.com" />
+    <label class="modal-label">Password</label>
+    <input type="password" id="singleCredPassword" placeholder="Your password" />
+    <button class="modal-btn" onclick="saveSingleCred()">Save</button>
+    <button class="modal-btn secondary" onclick="closeSingleCredModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo">Stream<span>Hub</span></div>
+  <div class="header-right">
+    <div class="tv-status" id="tvStatus" onclick="connectTV()">
+      <div class="tv-dot" id="tvDot"></div>
+      <span id="tvLabel">Find Samsung TV</span>
+    </div>
+    <button class="user-btn" id="userBtn" onclick="openCredsModal()" style="display:none">⚙ Platforms</button>
+  </div>
+</header>
+
+<!-- Main -->
+<main>
+  <div class="section-label">My platforms</div>
+  <div class="platforms" id="platforms">
+    <button class="platform-btn" data-platform="netflix" onclick="togglePlatform(this)">
+      <span class="dot"></span> Netflix <span class="config-badge" id="badge-netflix">setup</span>
+    </button>
+    <button class="platform-btn" data-platform="disney" onclick="togglePlatform(this)">
+      <span class="dot"></span> Disney+ <span class="config-badge" id="badge-disney">setup</span>
+    </button>
+    <button class="platform-btn" data-platform="amazon" onclick="togglePlatform(this)">
+      <span class="dot"></span> Prime Video <span class="config-badge" id="badge-amazon">setup</span>
+    </button>
+    <button class="platform-btn" data-platform="flow" onclick="togglePlatform(this)">
+      <span class="dot"></span> Flow <span class="config-badge" id="badge-flow">setup</span>
+    </button>
+  </div>
+
+  <div class="section-label">What do you want to watch?</div>
+  <div class="search-wrap">
+    <textarea class="search-input" id="searchInput"
+      placeholder="e.g. thriller under 2 hours, something with Keanu Reeves, Yiya Murano…"
+      rows="2" onkeydown="handleKey(event)"></textarea>
+    <button class="search-btn" id="searchBtn" onclick="doSearch()">Search</button>
+  </div>
+  <div class="search-examples">
+    <span class="example-chip" onclick="useExample(this)">Romantic comedy from the 90s</span>
+    <span class="example-chip" onclick="useExample(this)">True crime documentary, under 2 hrs</span>
+    <span class="example-chip" onclick="useExample(this)">Recent action movie</span>
+    <span class="example-chip" onclick="useExample(this)">Short series to binge in a weekend</span>
+  </div>
+  <div id="results"></div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Config ──
+  const API = ''; // same origin on Vercel; empty string = relative URLs
+  const PLATFORM_LABEL = { netflix:'Netflix', disney:'Disney+', amazon:'Prime Video', flow:'Flow' };
+  const BADGE_CLASS = { netflix:'badge-netflix', disney:'badge-disney', amazon:'badge-amazon', flow:'badge-flow' };
+
+  // ── State ──
+  let token = localStorage.getItem('sh_token') || '';
+  let configuredPlatforms = {};  // { netflix: { email, connected }, ... }
+  let activePlatforms = [];
+  let tvConnected = false;
+  let currentSingleCredPlatform = null;
+  let authMode = 'register'; // or 'login'
+
+  // ── Init ──
+  if (token) {
+    document.getElementById('authModal').style.display = 'none';
+    document.getElementById('userBtn').style.display = '';
+    loadConfiguredPlatforms();
+  }
+
+  // ── Auth ──
+  function toggleAuthMode() {
+    authMode = authMode === 'register' ? 'login' : 'register';
+    document.getElementById('authTitle').textContent = authMode === 'register' ? 'Welcome to StreamHub' : 'Sign in';
+    document.getElementById('authSubtitle').textContent = authMode === 'register'
+      ? 'Create an account to save your streaming platforms and search across all of them.'
+      : 'Sign in to access your streaming platforms.';
+    document.getElementById('authSubmitBtn').textContent = authMode === 'register' ? 'Create account' : 'Sign in';
+    document.getElementById('authToggleBtn').textContent = authMode === 'register'
+      ? 'Already have an account? Sign in'
+      : "Don't have an account? Register";
+  }
+
+  async function submitAuth() {
+    const email = document.getElementById('authEmail').value.trim();
+    const password = document.getElementById('authPassword').value;
+    if (!email || !password) { showToast('Please fill in all fields', 'error'); return; }
+
+    const btn = document.getElementById('authSubmitBtn');
+    btn.disabled = true; btn.textContent = '...';
+
+    try {
+      const resp = await fetch(`${API}/api/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: authMode, email, password })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+
+      token = data.token;
+      localStorage.setItem('sh_token', token);
+      document.getElementById('authModal').style.display = 'none';
+      document.getElementById('userBtn').style.display = '';
+      showToast('Welcome to StreamHub!', 'success');
+      // Prompt to set up platforms
+      openCredsModal();
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = authMode === 'register' ? 'Create account' : 'Sign in';
+    }
+  }
+
+  // ── Load configured platforms ──
+  async function loadConfiguredPlatforms() {
+    try {
+      const resp = await fetch(`${API}/api/credentials`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      configuredPlatforms = data.platforms || {};
+      updatePlatformButtons();
+      // Auto-activate all configured platforms
+      activePlatforms = Object.keys(configuredPlatforms);
+    } catch (e) {
+      console.error('Failed to load platforms', e);
+    }
+  }
+
+  function updatePlatformButtons() {
+    document.querySelectorAll('.platform-btn').forEach(btn => {
+      const p = btn.dataset.platform;
+      const badge = document.getElementById(`badge-${p}`);
+      if (configuredPlatforms[p]) {
+        btn.classList.add('active');
+        if (badge) { badge.textContent = '✓'; badge.style.background = 'var(--green)'; }
+      } else {
+        btn.classList.remove('active');
+        if (badge) { badge.textContent = 'setup'; badge.style.background = ''; }
+      }
+    });
+    activePlatforms = document.querySelectorAll('.platform-btn.active')
+      ? Array.from(document.querySelectorAll('.platform-btn.active')).map(b => b.dataset.platform)
+      : [];
+  }
+
+  function togglePlatform(btn) {
+    const p = btn.dataset.platform;
+    if (!configuredPlatforms[p]) {
+      // Not configured yet — open setup
+      openSingleCredModal(p);
+      return;
+    }
+    btn.classList.toggle('active');
+    activePlatforms = Array.from(document.querySelectorAll('.platform-btn.active')).map(b => b.dataset.platform);
+  }
+
+  // ── Credentials Modal ──
+  function openCredsModal() {
+    const list = document.getElementById('credsList');
+    const platforms = ['netflix','disney','amazon','flow'];
+    list.innerHTML = platforms.map(p => `
+      <div class="platform-cred-row">
+        <div>
+          <div class="platform-cred-name">${PLATFORM_LABEL[p]}</div>
+          <div class="platform-cred-status ${configuredPlatforms[p] ? 'ok' : ''}">
+            ${configuredPlatforms[p] ? `✓ ${configuredPlatforms[p].email}` : 'Not connected'}
+          </div>
+        </div>
+        <button class="cred-edit-btn" onclick="openSingleCredModal('${p}')">
+          ${configuredPlatforms[p] ? 'Edit' : 'Connect'}
+        </button>
+      </div>`).join('');
+    document.getElementById('credsModal').style.display = 'flex';
+  }
+
+  function closeCredsModal() {
+    document.getElementById('credsModal').style.display = 'none';
+  }
+
+  function openSingleCredModal(platform) {
+    currentSingleCredPlatform = platform;
+    document.getElementById('singleCredTitle').textContent = `Connect ${PLATFORM_LABEL[platform]}`;
+    document.getElementById('singleCredEmail').value = configuredPlatforms[platform]?.email || '';
+    document.getElementById('singleCredPassword').value = '';
+    document.getElementById('singleCredModal').style.display = 'flex';
+    document.getElementById('credsModal').style.display = 'none';
+  }
+
+  function closeSingleCredModal() {
+    document.getElementById('singleCredModal').style.display = 'none';
+    openCredsModal();
+  }
+
+  async function saveSingleCred() {
+    const email = document.getElementById('singleCredEmail').value.trim();
+    const password = document.getElementById('singleCredPassword').value;
+    if (!email || !password) { showToast('Please fill in both fields', 'error'); return; }
+
+    try {
+      const resp = await fetch(`${API}/api/credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ platform: currentSingleCredPlatform, email, password })
+      });
+      if (!resp.ok) { const d = await resp.json(); throw new Error(d.error); }
+
+      configuredPlatforms[currentSingleCredPlatform] = { email, connected: true };
+      updatePlatformButtons();
+      showToast(`${PLATFORM_LABEL[currentSingleCredPlatform]} connected ✓`, 'success');
+      closeSingleCredModal();
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  // ── Search ──
+  const PAGE_SIZE = 3;
+  let allResults = [];
+  let currentPage = 0;
+
+  function useExample(el) {
+    document.getElementById('searchInput').value = el.textContent;
+    doSearch();
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSearch(); }
+  }
+
+  async function doSearch() {
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) return;
+    if (!token) { document.getElementById('authModal').style.display = 'flex'; return; }
+    if (activePlatforms.length === 0) {
+      showToast('Connect at least one platform first', 'error');
+      openCredsModal();
+      return;
+    }
+
+    const btn = document.getElementById('searchBtn');
+    btn.disabled = true; btn.textContent = '...';
+
+    document.getElementById('results').innerHTML = `
+      <div class="state-box">
+        <div class="loading-dots"><span></span><span></span><span></span></div>
+        <div style="margin-top:16px">Searching your actual catalog on ${activePlatforms.map(p=>PLATFORM_LABEL[p]).join(', ')}…</div>
+      </div>`;
+
+    try {
+      const resp = await fetch(`${API}/api/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ query, platforms: activePlatforms })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error);
+
+      allResults = data.results || [];
+      currentPage = 0;
+      document.getElementById('results').innerHTML = '';
+
+      if (allResults.length === 0) {
+        document.getElementById('results').innerHTML =
+          `<div class="state-box"><span class="emoji">🔍</span>Not found in your catalog. Try a different search.</div>`;
+      } else {
+        renderPage(data.source === 'live');
+      }
+
+      if (data.errors?.length) {
+        data.errors.forEach(e => showToast(`${PLATFORM_LABEL[e.platform]}: ${e.error}`, 'error'));
+      }
+    } catch (e) {
+      document.getElementById('results').innerHTML =
+        `<div class="state-box"><span class="emoji">⚠️</span>${e.message}</div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Search';
+    }
+  }
+
+  function renderPage(isLive = false) {
+    const el = document.getElementById('results');
+    const existing = document.getElementById('show-more-btn');
+    if (existing) existing.remove();
+
+    const start = currentPage * PAGE_SIZE;
+    const slice = allResults.slice(start, start + PAGE_SIZE);
+
+    slice.forEach((r, i) => {
+      const platforms = r.platforms || (r.platform ? [r.platform] : []);
+      const badgesHtml = platforms.map(p =>
+        `<span class="platform-badge ${BADGE_CLASS[p]||''}">${PLATFORM_LABEL[p]||p}</span>`
+      ).join('');
+      const playBtns = platforms.map(p => `
+        <button class="play-btn" onclick="playOnTV('${p}','${encodeURIComponent(r.title)}','${encodeURIComponent(r.url||'')}')" ${tvConnected?'':'disabled'}>
+          <svg viewBox="0 0 16 16"><path d="M3 2.5l10 5.5-10 5.5V2.5z"/></svg>
+          Play on ${PLATFORM_LABEL[p]||p}
+        </button>`).join('');
+
+      const card = document.createElement('div');
+      card.className = 'result-card';
+      card.style.animationDelay = `${i*0.07}s`;
+      card.innerHTML = `
+        <div class="card-top">
+          <div class="card-title">
+            ${r.title}
+            ${isLive ? '<span class="live-badge">LIVE</span>' : ''}
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${badgesHtml}</div>
+        </div>
+        <div class="card-meta">
+          ${r.year ? `<span class="meta-tag">${r.year}</span>` : ''}
+          ${r.duration ? `<span class="meta-tag">${r.duration}</span>` : ''}
+          ${r.age_rating ? `<span class="meta-tag" style="color:var(--accent-hi);border:1px solid var(--accent);border-radius:4px;padding:2px 6px;font-size:11px">${r.age_rating}</span>` : ''}
+          ${(r.genre||[]).map(g=>`<span class="meta-tag">${g}</span>`).join('')}
+          ${r.confidence==='medium'?'<span class="meta-tag" style="color:var(--soft)">availability unconfirmed</span>':''}
+        </div>
+        ${r.synopsis ? `<div class="card-synopsis">${r.synopsis}</div>` : ''}
+        <div class="card-actions">
+          <div class="extra-cost ${r.extra_cost?'':'free'}">${r.extra_cost?'💳 Extra cost':'✓ Included in your plan'}</div>
+          <div class="play-btns">${playBtns}</div>
+        </div>`;
+      el.appendChild(card);
+    });
+
+    currentPage++;
+
+    if (currentPage * PAGE_SIZE < allResults.length) {
+      const remaining = allResults.length - currentPage * PAGE_SIZE;
+      const btn = document.createElement('button');
+      btn.id = 'show-more-btn';
+      btn.className = 'show-more-btn';
+      btn.textContent = `Show ${Math.min(remaining, PAGE_SIZE)} more results`;
+      btn.onclick = () => renderPage(isLive);
+      el.appendChild(btn);
+    }
+  }
+
+  // ── Samsung TV ──
+  async function connectTV() {
+    if (tvConnected) { showToast('Samsung TV already connected', 'success'); return; }
+    showToast('Looking for Samsung TV on the network…');
+
+    // Samsung TVs expose a WebSocket on port 8002
+    // We try common local IPs — in production we'd use mDNS/SSDP
+    const commonIPs = ['192.168.1.1','192.168.0.1','192.168.1.100','192.168.0.100'];
+    let found = false;
+
+    for (const ip of commonIPs) {
+      try {
+        const ws = new WebSocket(`wss://${ip}:8002/api/v2/channels/samsung.remote.control?name=StreamHub`);
+        await new Promise((resolve, reject) => {
+          ws.onopen = () => { found = true; ws.close(); resolve(); };
+          ws.onerror = reject;
+          setTimeout(reject, 2000);
+        });
+        if (found) {
+          window._tvIP = ip;
+          break;
+        }
+      } catch { continue; }
+    }
+
+    if (found) {
+      tvConnected = true;
+      document.getElementById('tvDot').classList.add('connected');
+      document.getElementById('tvLabel').textContent = 'Samsung TV ✓';
+      showToast('Samsung TV connected ✓', 'success');
+      document.querySelectorAll('.play-btn').forEach(b => b.disabled = false);
+    } else {
+      showToast('Samsung TV not found. Make sure you\'re on the same WiFi.', 'error');
+    }
+  }
+
+  async function playOnTV(platform, titleEncoded, urlEncoded) {
+    const title = decodeURIComponent(titleEncoded);
+    if (!tvConnected) { showToast('Connect your Samsung TV first', 'error'); return; }
+
+    // Get the correct app ID + deep link from our backend
+    const resp = await fetch(`${API}/api/tv`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ action: 'get-launch-config', platform })
+    });
+    const config = await resp.json();
+
+    // Send WebSocket command to TV
+    const ws = new WebSocket(`wss://${window._tvIP}:8002/api/v2/channels/samsung.remote.control?name=StreamHub`);
+    ws.onopen = () => {
+      ws.send(JSON.stringify(config.wsCommand));
+      ws.close();
+      showToast(`Opening ${title} on your Samsung TV…`, 'success');
+    };
+    ws.onerror = () => showToast('Could not reach Samsung TV', 'error');
+  }
+
+  // ── Toast ──
+  function showToast(msg, type='') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type}`;
+    void t.offsetWidth;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3500);
+  }
+</script>
+</body>
+</html>
