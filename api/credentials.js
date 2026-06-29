@@ -1,5 +1,4 @@
 const { requireAuth, saveCreds, getAllCreds } = require('../lib/db');
-const { validateCredentials } = require('../lib/scraper');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,17 +15,6 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'Invalid platform' });
     if (!email || !password)
       return res.status(400).json({ error: 'Email and password required' });
-
-    // Validate credentials before saving
-    try {
-      const validation = await validateCredentials(platform, { email, password });
-      if (!validation.success) {
-        return res.status(401).json({ error: `Could not log in to ${platform}: ${validation.error}` });
-      }
-    } catch (e) {
-      return res.status(500).json({ error: `Validation failed: ${e.message}` });
-    }
-
     await saveCreds(user.userId, platform, email, password);
     return res.status(200).json({ ok: true, platform });
   }
