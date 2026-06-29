@@ -8,9 +8,10 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
+    "@sparticuz/chromium": "^123.0.0",
     "@upstash/redis": "^1.28.0",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
-    "playwright": "^1.44.0"
+    "puppeteer-core": "^22.0.0"
   }
 }
