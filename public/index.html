@@ -208,7 +208,24 @@
 
 <script>
   // ── Config ──
-  const API = ''; // same origin on Vercel; empty string = relative URLs
+  const API = ''; // same origin on Railway
+  // Chrome extension ID — update this after installing the extension
+  let EXTENSION_ID = localStorage.getItem('sh_ext_id') || '';
+  let extensionAvailable = false;
+
+  // Check if extension is installed
+  async function checkExtension() {
+    if (!EXTENSION_ID) return false;
+    return new Promise(resolve => {
+      try {
+        chrome.runtime.sendMessage(EXTENSION_ID, { action: 'ping' }, response => {
+          if (chrome.runtime.lastError || !response?.ok) { resolve(false); return; }
+          extensionAvailable = true;
+          resolve(true);
+        });
+      } catch { resolve(false); }
+    });
+  }
   const PLATFORM_LABEL = { netflix:'Netflix', disney:'Disney+', amazon:'Prime Video', flow:'Flow' };
   const BADGE_CLASS = { netflix:'badge-netflix', disney:'badge-disney', amazon:'badge-amazon', flow:'badge-flow' };
 
@@ -356,25 +373,108 @@
   }
 
   async function saveSingleCred() {
-    const email = document.getElementById('singleCredEmail').value.trim();
-    const password = document.getElementById('singleCredPassword').value;
-    if (!email || !password) { showToast('Please fill in both fields', 'error'); return; }
+    const platform = currentSingleCredPlatform;
+    const platformUrls = {
+      netflix: 'https://www.netflix.com/ar/login',
+      disney:  'https://www.disneyplus.com/ar/login',
+      amazon:  'https://www.primevideo.com/',
+      flow:    'https://www.flow.com.ar/'
+    };
 
-    try {
-      const resp = await fetch(`${API}/api/credentials`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ platform: currentSingleCredPlatform, email, password })
-      });
-      if (!resp.ok) { const d = await resp.json(); throw new Error(d.error); }
-
-      configuredPlatforms[currentSingleCredPlatform] = { email, connected: true };
-      updatePlatformButtons();
-      showToast(`${PLATFORM_LABEL[currentSingleCredPlatform]} connected ✓`, 'success');
-      closeSingleCredModal();
-    } catch (e) {
-      showToast(e.message, 'error');
+    // Check extension first
+    const hasExt = await checkExtension();
+    if (!hasExt) {
+      showExtensionSetup(platform);
+      return;
     }
+
+    // Open platform login in new tab
+    const loginUrl = platformUrls[platform];
+    showToast(`Opening ${PLATFORM_LABEL[platform]} login...`);
+    window.open(loginUrl, '_blank');
+
+    // Show "I've logged in" prompt
+    document.getElementById('singleCredModal').style.display = 'none';
+    showLoggedInPrompt(platform);
+  }
+
+  function showLoggedInPrompt(platform) {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'loggedInPrompt';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>Log in to ${PLATFORM_LABEL[platform]}</h2>
+        <p>A new tab has opened with the ${PLATFORM_LABEL[platform]} login page. Log in normally there, then come back here and click the button below.</p>
+        <button class="modal-btn" onclick="captureSession('${platform}')">I've logged in ✓</button>
+        <button class="modal-btn secondary" onclick="cancelLoggedIn()">Cancel</button>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+
+  function cancelLoggedIn() {
+    const el = document.getElementById('loggedInPrompt');
+    if (el) el.remove();
+    openCredsModal();
+  }
+
+  async function captureSession(platform) {
+    const el = document.getElementById('loggedInPrompt');
+    const btn = el?.querySelector('.modal-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Capturing session...'; }
+
+    chrome.runtime.sendMessage(EXTENSION_ID, {
+      action: 'getCookies',
+      platform,
+      token
+    }, async response => {
+      if (el) el.remove();
+      if (chrome.runtime.lastError || response?.error) {
+        showToast(response?.error || 'Could not capture session. Make sure you are logged in.', 'error');
+        openCredsModal();
+        return;
+      }
+      configuredPlatforms[platform] = { connected: true, email: '' };
+      updatePlatformButtons();
+      showToast(`${PLATFORM_LABEL[platform]} connected ✓`, 'success');
+      openCredsModal();
+    });
+  }
+
+  function showExtensionSetup(platform) {
+    document.getElementById('singleCredModal').style.display = 'none';
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'extSetupModal';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>Install StreamHub Connector</h2>
+        <p>To connect your streaming platforms securely, you need to install the StreamHub Chrome extension. It takes 30 seconds.</p>
+        <ol style="color:var(--soft);font-size:13px;line-height:2;padding-left:20px;margin-bottom:20px">
+          <li>Download the extension from the link below</li>
+          <li>Go to <strong style="color:var(--text)">chrome://extensions</strong> in a new tab</li>
+          <li>Turn on <strong style="color:var(--text)">Developer mode</strong> (top right)</li>
+          <li>Drag and drop the downloaded folder into Chrome</li>
+          <li>Copy the extension ID shown and paste it below</li>
+        </ol>
+        <a href="/streamhub-extension.zip" download style="display:block;text-align:center;margin-bottom:16px;color:var(--accent-hi)">Download StreamHub Connector</a>
+        <label class="modal-label">Extension ID (from chrome://extensions)</label>
+        <input type="text" id="extIdInput" placeholder="e.g. abcdefghijklmnopqrstuvwxyz" />
+        <button class="modal-btn" onclick="saveExtId('${platform}')">Save & Continue</button>
+        <button class="modal-btn secondary" onclick="document.getElementById('extSetupModal').remove();openCredsModal()">Cancel</button>
+      </div>`;
+    document.body.appendChild(overlay);
+  }
+
+  async function saveExtId(platform) {
+    const id = document.getElementById('extIdInput')?.value.trim();
+    if (!id) { showToast('Please enter the extension ID', 'error'); return; }
+    EXTENSION_ID = id;
+    localStorage.setItem('sh_ext_id', id);
+    document.getElementById('extSetupModal')?.remove();
+    // Now try connecting
+    currentSingleCredPlatform = platform;
+    await saveSingleCred();
   }
 
   // ── Search ──
