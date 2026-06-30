@@ -10,6 +10,7 @@ const auth = require('./api/auth');
 const credentials = require('./api/credentials');
 const search = require('./api/search');
 const tv = require('./api/tv');
+const session = require('./api/session');
 
 function parseBody(req) {
   return new Promise((resolve, reject) => {
@@ -56,6 +57,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/credentials') return credentials(req, wrappedRes);
     if (pathname === '/api/search')      return search(req, wrappedRes);
     if (pathname === '/api/tv')          return tv(req, wrappedRes);
+    if (pathname.startsWith('/api/session')) return session(req, wrappedRes);
 
     // Serve static files
     let filePath = path.join(__dirname, 'public', pathname === '/' ? 'index.html' : pathname);

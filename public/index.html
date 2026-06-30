@@ -282,8 +282,7 @@
       const data = await resp.json();
       configuredPlatforms = data.platforms || {};
       updatePlatformButtons();
-      // Auto-activate all configured platforms
-      activePlatforms = Object.keys(configuredPlatforms);
+      activePlatforms = Object.keys(configuredPlatforms).filter(p => configuredPlatforms[p].connected);
     } catch (e) {
       console.error('Failed to load platforms', e);
     }
@@ -293,17 +292,19 @@
     document.querySelectorAll('.platform-btn').forEach(btn => {
       const p = btn.dataset.platform;
       const badge = document.getElementById(`badge-${p}`);
-      if (configuredPlatforms[p]) {
+      const cfg = configuredPlatforms[p];
+      if (cfg && cfg.connected) {
         btn.classList.add('active');
         if (badge) { badge.textContent = '✓'; badge.style.background = 'var(--green)'; }
+      } else if (cfg && cfg.expired) {
+        btn.classList.remove('active');
+        if (badge) { badge.textContent = 'expired'; badge.style.background = 'var(--red)'; }
       } else {
         btn.classList.remove('active');
         if (badge) { badge.textContent = 'setup'; badge.style.background = ''; }
       }
     });
-    activePlatforms = document.querySelectorAll('.platform-btn.active')
-      ? Array.from(document.querySelectorAll('.platform-btn.active')).map(b => b.dataset.platform)
-      : [];
+    activePlatforms = Array.from(document.querySelectorAll('.platform-btn.active')).map(b => b.dataset.platform);
   }
 
   function togglePlatform(btn) {
@@ -431,6 +432,13 @@
 
       if (data.errors?.length) {
         data.errors.forEach(e => showToast(`${PLATFORM_LABEL[e.platform]}: ${e.error}`, 'error'));
+      }
+      if (data.expired?.length) {
+        data.expired.forEach(p => {
+          if (configuredPlatforms[p]) configuredPlatforms[p].expired = true;
+          showToast(`${PLATFORM_LABEL[p]} session expired — please reconnect`, 'error');
+        });
+        updatePlatformButtons();
       }
     } catch (e) {
       document.getElementById('results').innerHTML =
