@@ -524,85 +524,50 @@
         <div style="margin-top:16px">Searching your actual catalog on ${activePlatforms.map(p=>PLATFORM_LABEL[p]).join(', ')}…</div>
       </div>`;
 
-    try {
-      // Check if extension is available
-      const hasExt = await checkExtension();
+    const hasExt = await checkExtension();
 
-      if (hasExt) {
-        // Search via extension (uses your real browser sessions)
-        chrome.runtime.sendMessage(EXTENSION_ID, {
-          action: 'search',
-          query,
-          platforms: activePlatforms
-        }, async (data) => {
-          if (chrome.runtime.lastError) {
-            fallbackServerSearch(query);
-            return;
-          }
-          await handleSearchResults(data, true);
-          btn.disabled = false; btn.textContent = 'Search';
-        });
-      } else {
-        // Fallback to server search
-        await fallbackServerSearch(query);
+    if (hasExt) {
+      // Search via extension using real browser sessions
+      chrome.runtime.sendMessage(EXTENSION_ID, {
+        action: 'search',
+        query,
+        platforms: activePlatforms
+      }, async (data) => {
         btn.disabled = false; btn.textContent = 'Search';
-      }
-    } catch (e) {
-      document.getElementById('results').innerHTML =
-        `<div class="state-box"><span class="emoji">⚠️</span>${e.message}</div>`;
-      btn.disabled = false; btn.textContent = 'Search';
-    }
-  }
-
-  async function fallbackServerSearch(query) {
-    const resp = await fetch(`${API}/api/search`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ query, platforms: activePlatforms })
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error);
-    await handleSearchResults(data, false);
-  }
-
-  async function handleSearchResults(data, isLive) {
-    // If results came from extension, enrich with Claude metadata via server
-    let results = data.results || [];
-
-    if (isLive && results.length > 0) {
-      try {
-        const enrichResp = await fetch(`${API}/api/enrich`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ titles: results.map(r => ({ title: r.title, platform: r.platforms?.[0] })) })
-        });
-        if (enrichResp.ok) {
-          const enrichData = await enrichResp.json();
-          results = results.map(r => {
-            const m = enrichData.results?.find(x => x.title?.toLowerCase() === r.title?.toLowerCase()) || {};
-            return { ...r, ...m, title: r.title, platforms: r.platforms, url: r.url };
-          });
+        if (chrome.runtime.lastError || !data) {
+          document.getElementById('results').innerHTML =
+            `<div class="state-box"><span class="emoji">⚠️</span>Extension error. Make sure StreamHub Connector is installed.</div>`;
+          return;
         }
-      } catch { /* use raw results if enrichment fails */ }
+        renderResults(data.results || [], data.errors || [], data.needsLogin || [], true);
+      });
+    } else {
+      // No extension — show install prompt
+      btn.disabled = false; btn.textContent = 'Search';
+      document.getElementById('results').innerHTML =
+        `<div class="state-box"><span class="emoji">🔌</span>
+          <div>Install the StreamHub Connector extension to search your real catalog.</div>
+          <button class="show-more-btn" style="margin-top:16px" onclick="openCredsModal()">Set up extension</button>
+        </div>`;
     }
+  }
 
+  function renderResults(results, errors, needsLogin, isLive) {
     allResults = results;
     currentPage = 0;
     document.getElementById('results').innerHTML = '';
 
     if (allResults.length === 0) {
+      let msg = 'Not found in your catalog. Try a different search.';
+      if (errors.length) msg = errors.map(e => `${PLATFORM_LABEL[e.platform]}: ${e.error}`).join(' · ');
       document.getElementById('results').innerHTML =
-        `<div class="state-box"><span class="emoji">🔍</span>Not found in your catalog. Try a different search.</div>`;
+        `<div class="state-box"><span class="emoji">🔍</span>${msg}</div>`;
     } else {
       renderPage(isLive);
     }
 
-    if (data.errors?.length) {
-      data.errors.forEach(e => showToast(`${PLATFORM_LABEL[e.platform]}: ${e.error}`, 'error'));
-    }
-    if (data.needsLogin?.length) {
-      data.needsLogin.forEach(p => showToast(`Please log in to ${PLATFORM_LABEL[p]} in your browser`, 'error'));
-    }
+    errors.forEach(e => showToast(`${PLATFORM_LABEL[e.platform]}: ${e.error}`, 'error'));
+    needsLogin.forEach(p => showToast(`Please log in to ${PLATFORM_LABEL[p]} in your browser first`, 'error'));
   }
 
   function renderPage(isLive = false) {
