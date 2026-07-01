@@ -216,10 +216,12 @@
   // Check if extension is installed
   async function checkExtension() {
     if (!EXTENSION_ID) return false;
+    if (typeof chrome === 'undefined' || !chrome.runtime) return false;
     return new Promise(resolve => {
       try {
         chrome.runtime.sendMessage(EXTENSION_ID, { action: 'ping' }, response => {
-          if (chrome.runtime.lastError || !response?.ok) { resolve(false); return; }
+          if (chrome.runtime.lastError) { resolve(false); return; }
+          if (!response?.ok) { resolve(false); return; }
           extensionAvailable = true;
           resolve(true);
         });
@@ -423,14 +425,26 @@
     const btn = el?.querySelector('.modal-btn');
     if (btn) { btn.disabled = true; btn.textContent = 'Capturing session...'; }
 
+    if (typeof chrome === 'undefined' || !chrome.runtime) {
+      showToast('Extension not detected. Make sure it is installed and enabled.', 'error');
+      if (el) el.remove();
+      openCredsModal();
+      return;
+    }
+
     chrome.runtime.sendMessage(EXTENSION_ID, {
       action: 'getCookies',
       platform,
       token
-    }, async response => {
+    }, response => {
       if (el) el.remove();
-      if (chrome.runtime.lastError || response?.error) {
-        showToast(response?.error || 'Could not capture session. Make sure you are logged in.', 'error');
+      if (chrome.runtime.lastError) {
+        showToast('Extension not responding. Try reloading the page.', 'error');
+        openCredsModal();
+        return;
+      }
+      if (response?.error) {
+        showToast(response.error, 'error');
         openCredsModal();
         return;
       }
