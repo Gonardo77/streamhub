@@ -525,40 +525,83 @@
       </div>`;
 
     try {
-      const resp = await fetch(`${API}/api/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ query, platforms: activePlatforms })
-      });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error);
+      // Check if extension is available
+      const hasExt = await checkExtension();
 
-      allResults = data.results || [];
-      currentPage = 0;
-      document.getElementById('results').innerHTML = '';
-
-      if (allResults.length === 0) {
-        document.getElementById('results').innerHTML =
-          `<div class="state-box"><span class="emoji">🔍</span>Not found in your catalog. Try a different search.</div>`;
-      } else {
-        renderPage(data.source === 'live');
-      }
-
-      if (data.errors?.length) {
-        data.errors.forEach(e => showToast(`${PLATFORM_LABEL[e.platform]}: ${e.error}`, 'error'));
-      }
-      if (data.expired?.length) {
-        data.expired.forEach(p => {
-          if (configuredPlatforms[p]) configuredPlatforms[p].expired = true;
-          showToast(`${PLATFORM_LABEL[p]} session expired — please reconnect`, 'error');
+      if (hasExt) {
+        // Search via extension (uses your real browser sessions)
+        chrome.runtime.sendMessage(EXTENSION_ID, {
+          action: 'search',
+          query,
+          platforms: activePlatforms
+        }, async (data) => {
+          if (chrome.runtime.lastError) {
+            fallbackServerSearch(query);
+            return;
+          }
+          await handleSearchResults(data, true);
+          btn.disabled = false; btn.textContent = 'Search';
         });
-        updatePlatformButtons();
+      } else {
+        // Fallback to server search
+        await fallbackServerSearch(query);
+        btn.disabled = false; btn.textContent = 'Search';
       }
     } catch (e) {
       document.getElementById('results').innerHTML =
         `<div class="state-box"><span class="emoji">⚠️</span>${e.message}</div>`;
-    } finally {
       btn.disabled = false; btn.textContent = 'Search';
+    }
+  }
+
+  async function fallbackServerSearch(query) {
+    const resp = await fetch(`${API}/api/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ query, platforms: activePlatforms })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error);
+    await handleSearchResults(data, false);
+  }
+
+  async function handleSearchResults(data, isLive) {
+    // If results came from extension, enrich with Claude metadata via server
+    let results = data.results || [];
+
+    if (isLive && results.length > 0) {
+      try {
+        const enrichResp = await fetch(`${API}/api/enrich`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ titles: results.map(r => ({ title: r.title, platform: r.platforms?.[0] })) })
+        });
+        if (enrichResp.ok) {
+          const enrichData = await enrichResp.json();
+          results = results.map(r => {
+            const m = enrichData.results?.find(x => x.title?.toLowerCase() === r.title?.toLowerCase()) || {};
+            return { ...r, ...m, title: r.title, platforms: r.platforms, url: r.url };
+          });
+        }
+      } catch { /* use raw results if enrichment fails */ }
+    }
+
+    allResults = results;
+    currentPage = 0;
+    document.getElementById('results').innerHTML = '';
+
+    if (allResults.length === 0) {
+      document.getElementById('results').innerHTML =
+        `<div class="state-box"><span class="emoji">🔍</span>Not found in your catalog. Try a different search.</div>`;
+    } else {
+      renderPage(isLive);
+    }
+
+    if (data.errors?.length) {
+      data.errors.forEach(e => showToast(`${PLATFORM_LABEL[e.platform]}: ${e.error}`, 'error'));
+    }
+    if (data.needsLogin?.length) {
+      data.needsLogin.forEach(p => showToast(`Please log in to ${PLATFORM_LABEL[p]} in your browser`, 'error'));
     }
   }
 
