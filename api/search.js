@@ -20,27 +20,33 @@ module.exports = async function handler(req, res) {
   const { query, platforms: requestedPlatforms } = req.body || {};
   if (!query) return res.status(400).json({ error: 'Query required' });
 
-  // Load sessions for requested platforms
   const allPlatforms = ['netflix', 'disney', 'amazon', 'flow'];
   const toSearch = requestedPlatforms || allPlatforms;
   const sessionsByPlatform = {};
 
+  console.log(`[search] user=${user.userId} query="${query}" platforms=${toSearch.join(',')}`);
+
   for (const p of toSearch) {
     const s = await redis.get(sessionKey(user.userId, p));
+    console.log(`[search] ${p}: found=${!!s} hasCookies=${!!(s && s.cookies)} cookieCount=${s?.cookies?.length || 0}`);
     if (s && s.cookies) {
       const expired = s.expiresAt && Date.now() > s.expiresAt;
       if (!expired) sessionsByPlatform[p] = s;
+      else console.log(`[search] ${p}: session expired`);
     }
   }
 
+  console.log(`[search] searching platforms: ${Object.keys(sessionsByPlatform).join(',')}`);
+
   if (Object.keys(sessionsByPlatform).length === 0) {
+    console.log(`[search] no valid sessions found`);
     return res.status(400).json({ error: 'No connected platforms. Please connect your streaming accounts first.' });
   }
 
   try {
     const { results: rawResults, errors, expired } = await searchPlatforms(sessionsByPlatform, query);
+    console.log(`[search] raw results: ${rawResults.length} errors: ${JSON.stringify(errors)}`);
 
-    // Enrich with Claude metadata
     let enriched = rawResults;
     if (rawResults.length > 0) {
       const titles = rawResults.map(r => r.title).join('\n');
@@ -63,15 +69,9 @@ Always respond in English.`,
       } catch { enriched = rawResults; }
     }
 
-    return res.status(200).json({
-      results: enriched,
-      errors,
-      expired, // platforms whose sessions expired
-      source: 'live'
-    });
-
+    return res.status(200).json({ results: enriched, errors, expired, source: 'live' });
   } catch (e) {
-    console.error('Search error:', e);
+    console.error('[search] error:', e);
     return res.status(500).json({ error: e.message });
   }
 };
