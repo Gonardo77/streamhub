@@ -430,37 +430,18 @@
 
   async function captureSession(platform) {
     const el = document.getElementById('loggedInPrompt');
-    const btn = el?.querySelector('.modal-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Capturing session...'; }
-
-    if (typeof chrome === 'undefined' || !chrome.runtime) {
-      showToast('Extension not detected. Make sure it is installed and enabled.', 'error');
-      if (el) el.remove();
-      openCredsModal();
-      return;
-    }
-
-    chrome.runtime.sendMessage(EXTENSION_ID, {
-      action: 'getCookies',
-      platform,
-      token
-    }, response => {
-      if (el) el.remove();
-      if (chrome.runtime.lastError) {
-        showToast('Extension not responding. Try reloading the page.', 'error');
-        openCredsModal();
-        return;
-      }
-      if (response?.error) {
-        showToast(response.error, 'error');
-        openCredsModal();
-        return;
-      }
-      configuredPlatforms[platform] = { connected: true, email: '' };
-      updatePlatformButtons();
-      showToast(`${PLATFORM_LABEL[platform]} connected ✓`, 'success');
-      openCredsModal();
-    });
+    if (el) el.remove();
+    // Mark platform as connected — extension will search using browser session directly
+    configuredPlatforms[platform] = { connected: true, email: '' };
+    // Save to server
+    fetch(`${API}/api/credentials`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ platforms: configuredPlatforms })
+    }).catch(() => {});
+    updatePlatformButtons();
+    showToast(`${PLATFORM_LABEL[platform]} connected ✓`, 'success');
+    openCredsModal();
   }
 
   function showExtensionSetup(platform) {
