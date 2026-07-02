@@ -19,11 +19,28 @@ module.exports = async function handler(req, res) {
     const titleList = titles.map(t => t.title).join('\n');
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: `You are a movie/TV metadata assistant. Given a list of titles, return a JSON array enriching each one.
-Return ONLY valid JSON array, no markdown. Format:
-[{"title":"exact title as given","year":2023,"duration":"2h 15min","age_rating":"PG-13","genre":["Action"],"synopsis":"1-2 sentences in English.","type":"movie|series"}]
-Always respond in English.`,
+Return ONLY valid JSON array, no markdown, no explanations. Format:
+[{
+  "title": "exact title as given",
+  "year": 2023,
+  "type": "movie|series",
+  "duration": "2h 15min",
+  "seasons": 3,
+  "episodes": 30,
+  "age_rating": "PG-13",
+  "genre": ["Drama","Thriller"],
+  "synopsis": "2-3 sentence description in English."
+}]
+Rules:
+- All text in English
+- For movies: include duration, set seasons/episodes to null
+- For series: include seasons and episodes counts, set duration to null
+- age_rating: use G, PG, PG-13, R, TV-MA, TV-14, TV-PG, TV-G
+- genre: 1-3 genres max
+- synopsis: engaging, 2-3 sentences
+- If you dont know exact details, use your best estimate`,
       messages: [{ role: 'user', content: `Enrich these titles:\n${titleList}` }]
     });
 
