@@ -16,38 +16,21 @@ module.exports = async function handler(req, res) {
   if (!titles?.length) return res.status(400).json({ error: 'Titles required' });
 
   try {
-    const titleList = titles.map(t => t.title).join('\n');
+    const batch = titles.slice(0, 3);
+    const titleList = batch.map(t => t.title).join('\n');
     const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 3000,
-      system: `You are a movie/TV metadata assistant. Given a list of titles, return a JSON array enriching each one.
-Return ONLY valid JSON array, no markdown, no explanations. Format:
-[{
-  "title": "exact title as given",
-  "year": 2023,
-  "type": "movie|series",
-  "duration": "2h 15min",
-  "seasons": 3,
-  "episodes": 30,
-  "age_rating": "PG-13",
-  "genre": ["Drama","Thriller"],
-  "synopsis": "2-3 sentence description in English."
-}]
-Rules:
-- All text in English
-- For movies: include duration, set seasons/episodes to null
-- For series: include seasons and episodes counts, set duration to null
-- age_rating: use G, PG, PG-13, R, TV-MA, TV-14, TV-PG, TV-G
-- genre: 1-3 genres max
-- synopsis: engaging, 2-3 sentences
-- If you dont know exact details, use your best estimate`,
-      messages: [{ role: 'user', content: `Enrich these titles:\n${titleList}` }]
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: `Return a JSON array enriching these titles. ONLY JSON, no markdown.
+Format: [{"title":"exact title","year":2023,"type":"movie or series","duration":"1h 30min","seasons":null,"episodes":null,"age_rating":"PG-13","genre":["Drama"],"synopsis":"One sentence."}]
+Titles:\n${titleList}` }]
     });
 
     const text = msg.content[0].text.replace(/```json|```/g, '').trim();
     const results = JSON.parse(text);
     return res.status(200).json({ results });
   } catch (e) {
+    console.error('Enrich error:', e.message);
     return res.status(500).json({ error: e.message });
   }
 };
