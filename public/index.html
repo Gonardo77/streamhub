@@ -515,7 +515,8 @@
 
   async function enrichResults(results) {
     try {
-      const AKEY = 'ANTHROPIC_KEY_PLACEHOLDER';
+      const AKEY = localStorage.getItem('akey') || '';
+      if (!AKEY) return;
       const batch = results.slice(0, 4);
       const titleList = batch.map(r => r.title).join('\n');
       const resp = await fetch('https://api.anthropic.com/v1/messages', {
