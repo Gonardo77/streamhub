@@ -515,13 +515,29 @@
 
   async function enrichResults(results) {
     try {
-      const resp = await fetch(`${API}/api/enrich`, {
+      const AKEY = 'ANTHROPIC_KEY_PLACEHOLDER';
+      const batch = results.slice(0, 4);
+      const titleList = batch.map(r => r.title).join('\n');
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ titles: results.map(r => ({ title: r.title, platform: r.platforms&&r.platforms[0] })) })
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': AKEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 1500,
+          messages: [{ role: 'user', content: `Return a JSON array enriching these titles. ONLY JSON, no markdown, no explanation.
+Format: [{"title":"exact title","year":2023,"type":"movie or series","duration":"1h 30min","seasons":null,"episodes":null,"age_rating":"TV-MA","genre":["Drama"],"synopsis":"One engaging sentence."}]
+Titles:\n${titleList}` }]
+        })
       });
       if (!resp.ok) return;
-      const data = await resp.json();
+      const raw = await resp.json();
+      const text = raw.content[0].text.replace(/\`\`\`json|\`\`\`/g, '').trim();
+      const data = { results: JSON.parse(text) };
       if (!data.results) return;
       // Update allResults with enriched data
       allResults = allResults.map(r => {
