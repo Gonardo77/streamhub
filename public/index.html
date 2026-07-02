@@ -523,16 +523,58 @@
       if (!resp.ok) return;
       const data = await resp.json();
       if (!data.results) return;
+      // Update allResults with enriched data
       allResults = allResults.map(r => {
         const m = data.results.find(x => x.title&&x.title.toLowerCase()===r.title.toLowerCase());
         if (!m) return r;
         return Object.assign({}, r, { year: m.year||r.year, duration: m.duration||r.duration, age_rating: m.age_rating||r.age_rating, genre: m.genre||r.genre, synopsis: m.synopsis||r.synopsis, type: m.type||r.type, seasons: m.seasons||r.seasons, episodes: m.episodes||r.episodes });
       });
-      const savedPage = currentPage;
-      currentPage = 0;
-      document.getElementById('results').innerHTML = '';
-      for (let p = 0; p < savedPage; p++) renderPage(true);
-    } catch(e) {}
+      // Update each rendered card in-place
+      document.querySelectorAll('.result-card').forEach((card, idx) => {
+        const r = allResults[idx];
+        if (!r) return;
+        // Type
+        const typeLabel = r.type === 'series' ? 'Series' : r.type === 'movie' ? 'Movie' : '';
+        let typeEl = card.querySelector('.content-type');
+        if (typeLabel && !typeEl) {
+          typeEl = document.createElement('span');
+          typeEl.className = 'content-type';
+          const titleEl = card.querySelector('.card-title');
+          if (titleEl && titleEl.parentNode) titleEl.parentNode.appendChild(typeEl);
+        }
+        if (typeEl && typeLabel) typeEl.textContent = typeLabel;
+        // Meta tags
+        let metaEl = card.querySelector('.card-meta');
+        if (metaEl) {
+          const parts = [];
+          if (r.year) parts.push(`<span class="meta-tag">${r.year}</span>`);
+          if (r.seasons) parts.push(`<span class="meta-tag">${r.seasons} season${r.seasons>1?'s':''}</span>`);
+          if (r.episodes) parts.push(`<span class="meta-tag">${r.episodes} ep</span>`);
+          if (r.duration) parts.push(`<span class="meta-tag">${r.duration}</span>`);
+          if (r.age_rating) parts.push(`<span class="meta-tag" style="color:var(--accent-hi);border:1px solid var(--accent);border-radius:4px;padding:2px 6px;font-size:11px">${r.age_rating}</span>`);
+          if (r.genre) r.genre.forEach(g => parts.push(`<span class="meta-tag">${g}</span>`));
+          metaEl.innerHTML = parts.join('');
+        }
+        // Synopsis
+        if (r.synopsis && !card.querySelector('.synopsis-toggle')) {
+          const actionsEl = card.querySelector('.card-actions');
+          if (actionsEl) {
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'synopsis-toggle';
+            toggleBtn.textContent = '▼ Show description';
+            toggleBtn.onclick = function() {
+              synopsisEl.classList.toggle('open');
+              toggleBtn.textContent = synopsisEl.classList.contains('open') ? '▲ Hide description' : '▼ Show description';
+            };
+            const synopsisEl = document.createElement('div');
+            synopsisEl.className = 'synopsis-body';
+            synopsisEl.textContent = r.synopsis;
+            card.insertBefore(toggleBtn, actionsEl);
+            card.insertBefore(synopsisEl, actionsEl);
+          }
+        }
+      });
+    } catch(e) { console.log('enrich error', e); }
   }
 
   async function doSearch() {
