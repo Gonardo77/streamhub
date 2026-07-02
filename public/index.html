@@ -610,8 +610,17 @@ Titles:\n${titleList}` }]
           return;
         }
         const rawResults = data.results || [];
+        const query2 = document.getElementById('searchInput').value.trim();
         renderResults(rawResults, data.errors || [], data.needsLogin || [], true);
-        if (rawResults.length > 0) enrichResults(rawResults);
+        if (rawResults.length > 0) {
+          rankResults(rawResults, query2).then(function(ranked) {
+            allResults = ranked;
+            currentPage = 0;
+            document.getElementById('results').innerHTML = '';
+            renderPage(true);
+            enrichResults(ranked);
+          });
+        }
       });
     } else {
       // No extension — show install prompt
@@ -622,6 +631,40 @@ Titles:\n${titleList}` }]
           <button class="show-more-btn" style="margin-top:16px" onclick="openCredsModal()">Set up extension</button>
         </div>`;
     }
+  }
+
+  async function rankResults(results, query) {
+    const AKEY = localStorage.getItem('akey') || '';
+    if (!AKEY || results.length <= 1) return results;
+    try {
+      const titles = results.map((r,i) => `${i}. ${r.title} (${r.platforms[0]})`).join('\n');
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': AKEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 200,
+          messages: [{ role: 'user', content: `User searched for: "${query}"
+Rank these results by relevance (most relevant first). Return ONLY a JSON array of the original index numbers, e.g. [2,0,5,1,3,4].
+Results:
+${titles}` }]
+        })
+      });
+      if (!resp.ok) return results;
+      const data = await resp.json();
+      const text = data.content[0].text.replace(/\`\`\`json|\`\`\`/g,'').trim();
+      const order = JSON.parse(text);
+      if (!Array.isArray(order)) return results;
+      const ranked = order.map(i => results[i]).filter(Boolean);
+      // Add any missed results at the end
+      results.forEach((r,i) => { if (!order.includes(i)) ranked.push(r); });
+      return ranked;
+    } catch(e) { return results; }
   }
 
   function renderResults(results, errors, needsLogin, isLive) {
